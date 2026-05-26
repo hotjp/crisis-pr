@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crisis PR - 危机声明生成器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        .slider-thumb::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: currentColor;
+            cursor: pointer;
+        }
+        .conflict-cell {
+            transition: all 0.3s ease;
+        }
+        .pulse-red {
+            animation: pulse-red 2s infinite;
+        }
+        @keyframes pulse-red {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .stream-text {
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans">
+    <div class="max-w-7xl mx-auto p-4 md:p-6">
+        <!-- Header -->
+        <div class="mb-6 flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold tracking-tight">Crisis PR <span class="text-gray-400 font-normal">| 危机声明生成器</span></h1>
+                <p class="text-sm text-gray-500 mt-1">多切面帕累托求解 → 单切面声明输出</p>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="resetWeights()" class="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-100">重置权重</button>
+                <button onclick="loadTemplate('L3')" class="px-3 py-1.5 text-sm bg-red-50 text-red-700 border border-red-200 rounded hover:bg-red-100">L3模板</button>
+                <button onclick="loadTemplate('L2')" class="px-3 py-1.5 text-sm bg-orange-50 text-orange-700 border border-orange-200 rounded hover:bg-orange-100">L2模板</button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <!-- Left Panel: Input & Controls -->
+            <div class="lg:col-span-5 space-y-6">
+                <!-- Event Form -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+                    <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">事件输入</h2>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">事件标题</label>
+                            <input id="eventTitle" type="text" value="母亲节营销文案翻车" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600 mb-1">危机等级</label>
+                                <select id="crisisLevel" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none">
+                                    <option value="L1">L1 - 产品服务</option>
+                                    <option value="L2">L2 - 认知盲区</option>
+                                    <option value="L3" selected>L3 - 伦理底线</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600 mb-1">特殊节点</label>
+                                <select id="timing" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none">
+                                    <option value="">无</option>
+                                    <option value="母亲节" selected>母亲节</option>
+                                    <option value="灾难纪念日">灾难纪念日</option>
+                                    <option value="国庆节">国庆节</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">触发内容（原文）</label>
+                            <textarea id="triggerContent" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none">我妈有两个老公，一个是我爸，另一个一年见两回</textarea>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">受害群体</label>
+                            <input id="victim" type="text" value="广大母亲群体" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">根因定性（三选一锚点）</label>
+                            <select id="rootCause" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none">
+                                <option value="敬畏心缺失" selected>敬畏心缺失</option>
+                                <option value="流量优先于底线">流量优先于底线</option>
+                                <option value="价值观偏差">价值观偏差</option>
+                                <option value="认知盲区">认知盲区</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">责任人（姓名+职务）</label>
+                            <input id="executive" type="text" value="段xx，高级副总裁" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Facet Sliders -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wider">切面权重（零和池）</h2>
+                        <span id="totalWeight" class="text-xs font-mono bg-gray-100 px-2 py-1 rounded">Σ 100%</span>
+                    </div>
+                    <div id="slidersContainer" class="space-y-4">
+                        <!-- Generated by JS -->
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-gray-100">
+                        <div class="flex items-center justify-between text-xs text-gray-500">
+                            <span>🔒 锁定项不受拖动影响</span>
+                            <span id="primaryFacet" class="font-semibold text-blue-600">主切面: 外部谅解</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- LLM Config -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+                    <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">LLM 配置</h2>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">API Endpoint（OpenAI 兼容）</label>
+                            <input id="apiEndpoint" type="text" value="https://api.openai.com/v1/chat/completions" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">Model</label>
+                            <input id="modelName" type="text" value="gpt-4o" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">API Key</label>
+                            <input id="apiKey" type="password" placeholder="sk-..." class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none">
+                            <p class="text-xs text-gray-400 mt-1">纯前端调用，Key 仅存储在本地内存</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Visualization & Output -->
+            <div class="lg:col-span-7 space-y-6">
+                <!-- Radar Chart -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+                    <div class="flex items-center justify-between mb-2">
+                        <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wider">切面雷达</h2>
+                        <span id="recommendedFramework" class="text-xs px-2 py-1 bg-blue-50 text-blue-700 rounded border border-blue-100 font-medium">推荐框架: L3-ETHIC</span>
+                    </div>
+                    <div id="radarChart" style="width: 100%; height: 320px;"></div>
+                </div>
+
+                <!-- Conflict Matrix -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+                    <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">冲突热力图</h2>
+                    <div id="conflictMatrix" class="grid grid-cols-8 gap-1">
+                        <!-- Generated by JS -->
+                    </div>
+                    <div id="conflictAlert" class="mt-3 hidden">
+                        <div class="flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-100 rounded px-3 py-2">
+                            <span class="font-bold">⚠️ 冲突预警</span>
+                            <span id="conflictText">外部谅解与法律诉讼处于高危张力状态</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Generate Button -->
+                <button onclick="generateStatement()" id="genBtn" class="w-full py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-colors flex items-center justify-center gap-2">
+                    <span>生成危机声明</span>
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                </button>
+
+                <!-- Output -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wider">生成结果</h2>
+                        <div class="flex gap-2">
+                            <button onclick="copyOutput()" class="text-xs px-2 py-1 border border-gray-300 rounded hover:bg-gray-50">复制</button>
+                            <button onclick="downloadOutput()" class="text-xs px-2 py-1 border border-gray-300 rounded hover:bg-gray-50">下载</button>
+                        </div>
+                    </div>
+                    <div id="outputArea" class="min-h-[200px] p-4 bg-gray-50 rounded-lg border border-gray-200 text-sm stream-text text-gray-700">
+                        <span class="text-gray-400 italic">点击上方按钮生成声明...</span>
+                    </div>
+                    <div id="metaInfo" class="mt-3 hidden">
+                        <div class="flex flex-wrap gap-2 text-xs">
+                            <span class="px-2 py-1 bg-gray-100 rounded text-gray-600">主切面: <b id="metaPrimary">-</b></span>
+                            <span class="px-2 py-1 bg-gray-100 rounded text-gray-600">框架: <b id="metaFramework">-</b></span>
+                            <span class="px-2 py-1 bg-gray-100 rounded text-gray-600">字数: <b id="metaLength">-</b></span>
+                            <span class="px-2 py-1 bg-gray-100 rounded text-gray-600">禁忌词拦截: <b id="metaGuard">已启用</b></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+// ==================== Data Model ====================
+const facets = [
+    { id: 'public_trust', name: '外部谅解', weight: 40, locked: true, color: '#ef4444', desc: '公众情绪修复' },
+    { id: 'social_stability', name: '社会稳定性', weight: 20, locked: false, color: '#8b5cf6', desc: '舆情扩散控制' },
+    { id: 'internal_stability', name: '内部稳定', weight: 15, locked: false, color: '#f59e0b', desc: '组织连续性' },
+    { id: 'political', name: '政治合规', weight: 10, locked: false, color: '#3b82f6', desc: '监管关系' },
+    { id: 'capital', name: '资本市场', weight: 5, locked: false, color: '#10b981', desc: '股东信心' },
+    { id: 'supply_chain', name: '供应链', weight: 5, locked: false, color: '#6366f1', desc: '合作伙伴' },
+    { id: 'legal', name: '法律诉讼', weight: 3, locked: false, color: '#ec4899', desc: '诉讼风险' },
+    { id: 'international', name: '国际/跨文化', weight: 2, locked: false, color: '#14b8a6', desc: '海外影响' }
+];
+
+// Conflict pairs: strength 0-1
+const conflicts = [
+    { a: 'public_trust', b: 'legal', strength: 0.9, desc: '认罪 vs 避险' },
+    { a: 'public_trust', b: 'internal_stability', strength: 0.7, desc: '问责 vs 士气' },
+    { a: 'political', b: 'capital', strength: 0.5, desc: '低调 vs 信心' },
+    { a: 'social_stability', b: 'capital', strength: 0.4, desc: '扩散 vs 恐慌' },
+    { a: 'legal', b: 'supply_chain', strength: 0.3, desc: '自认 vs 切割' }
+];
+
+let radarChart = null;
+
+// ==================== Init ====================
+function init() {
+    renderSliders();
+    renderRadar();
+    renderConflictMatrix();
+    updatePrimaryFacet();
+}
+
+// ==================== Sliders ====================
+function renderSliders() {
+    const container = document.getElementById('slidersContainer');
+    container.innerHTML = facets.map((f, idx) => `
+        <div class="group">
+            <div class="flex items-center justify-between mb-1.5">
+                <div class="flex items-center gap-2">
+                    <div class="w-3 h-3 rounded-full" style="background:${f.color}"></div>
+                    <span class="text-sm font-medium text-gray-700">${f.name}</span>
+                    <span class="text-xs text-gray-400 hidden group-hover:inline">${f.desc}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-mono font-semibold" style="color:${f.color}" id="val-${f.id}">${f.weight}</span>
+                    <button onclick="toggleLock('${f.id}')" class="text-xs p-1 rounded hover:bg-gray-100" title="${f.locked ? '已锁定' : '点击锁定'}">
+                        ${f.locked ? '🔒' : '🔓'}
+                    </button>
+                </div>
+            </div>
+            <input type="range" min="0" max="100" value="${f.weight}" 
+                class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-thumb"
+                style="color: ${f.color}"
+                id="slider-${f.id}"
+                oninput="handleSliderChange('${f.id}', this.value)"
+            >
+        </div>
+    `).join('');
+    updateTotal();
+}
+
+function handleSliderChange(changedId, newValue) {
+    let val = parseInt(newValue);
+    const changed = facets.find(f => f.id === changedId);
+    
+    // If locked, reject change (visual feedback could be added)
+    if (changed.locked) {
+        document.getElementById(`slider-${changedId}`).value = changed.weight;
+        return;
+    }
+
+    const oldWeight = changed.weight;
+    const delta = val - oldWeight;
+    
+    if (delta === 0) return;
+    
+    // Zero-sum redistribution among unlocked facets
+    const others = facets.filter(f => f.id !== changedId && !f.locked);
+    const lockedSum = facets.filter(f => f.locked).reduce((s, f) => s + f.weight, 0);
+    
+    if (others.length === 0) {
+        // All others locked, can't change
+        document.getElementById(`slider-${changedId}`).value = changed.weight;
+        return;
+    }
+    
+    // New total would be: lockedSum + val + sum(others)
+    // We want total = 100
+    // So others must sum to 100 - lockedSum - val
+    const targetOthersSum = 100 - lockedSum - val;
+    const currentOthersSum = others.reduce((s, f) => s + f.weight, 0);
+    
+    if (targetOthersSum < 0) {
+        // Can't increase that much, cap it
+        val = 100 - lockedSum;
+        document.getElementById(`slider-${changedId}`).value = val;
+        // Others go to 0
+        others.forEach(f => f.weight = 0);
+    } else if (targetOthersSum > currentOthersSum + others.length * 100) {
+        // Shouldn't happen with max 100
+    } else {
+        // Redistribute proportionally
+        if (currentOthersSum === 0) {
+            // Equal split if all were 0
+            const equal = Math.floor(targetOthersSum / others.length);
+            let remainder = targetOthersSum - equal * others.length;
+            others.forEach((f, i) => {
+                f.weight = equal + (i < remainder ? 1 : 0);
+            });
+        } else {
+            const ratio = targetOthersSum / currentOthersSum;
+            let distributed = 0;
+            others.forEach((f, i) => {
+                if (i === others.length - 1) {
+                    f.weight = targetOthersSum - distributed;
+                } else {
+                    const newW = Math.round(f.weight * ratio);
+                    f.weight = newW;
+                    distributed += newW;
+                }
+            });
+        }
+    }
+    
+    changed.weight = val;
+    
+    // Sync UI
+    facets.forEach(f => {
+        document.getElementById(`slider-${f.id}`).value = f.weight;
+        document.getElementById(`val-${f.id}`).textContent = f.weight;
+    });
+    
+    updateTotal();
+    updateRadar();
+    updateConflictMatrix();
+    updatePrimaryFacet();
+}
+
+function toggleLock(id) {
+    const f = facets.find(x => x.id === id);
+    f.locked = !f.locked;
+    renderSliders();
+}
+
+function updateTotal() {
+    const sum = facets.reduce((s, f) => s + f.weight, 0);
+    const el = document.getElementById('totalWeight');
+    el.textContent = `Σ ${sum}%`;
+    el.className = sum === 100 
+        ? 'text-xs font-mono bg-green-100 text-green-700 px-2 py-1 rounded'
+        : 'text-xs font-mono bg-red-100 text-red-700 px-2 py-1 rounded';
+}
+
+function updatePrimaryFacet() {
+    const max = Math.max(...facets.map(f => f.weight));
+    const primary = facets.find(f => f.weight === max);
+    document.getElementById('primaryFacet').textContent = `主切面: ${primary.name} (${primary.weight}%)`;
+    document.getElementById('primaryFacet').style.color = primary.color;
+    
+    // Framework recommendation
+    const level = document.getElementById('crisisLevel').value;
+    const framework = `${level}-${primary.id.split('_')[0].toUpperCase().slice(0, 4)}`;
+    document.getElementById('recommendedFramework').textContent = `推荐框架: ${framework}`;
+}
+
+function resetWeights() {
+    facets.forEach(f => {
+        f.weight = 10;
+        f.locked = false;
+    });
+    facets[0].weight = 40; // public trust
+    facets[0].locked = true;
+    renderSliders();
+    updateRadar();
+    updateConflictMatrix();
+    updatePrimaryFacet();
+}
+
+function loadTemplate(level) {
+    const templates = {
+        'L3': [40, 20, 15, 10, 5, 5, 3, 2],
+        'L2': [30, 15, 20, 15, 10, 5, 3, 2],
+        'L1': [20, 10, 15, 10, 20, 15, 5, 5]
+    };
+    const vals = templates[level] || templates['L3'];
+    facets.forEach((f, i) => {
+        f.weight = vals[i];
+        f.locked = i === 0; // lock primary
+    });
+    document.getElementById('crisisLevel').value = level;
+    renderSliders();
+    updateRadar();
+    updateConflictMatrix();
+    updatePrimaryFacet();
+}
+
+// ==================== Radar Chart ====================
+function renderRadar() {
+    radarChart = echarts.init(document.getElementById('radarChart'));
+    updateRadar();
+}
+
+function updateRadar() {
+    const maxWeight = Math.max(...facets.map(f => f.weight));
+    const primaryId = facets.find(f => f.weight === maxWeight).id;
+    
+    const option = {
+        radar: {
+            indicator: facets.map(f => ({ name: f.name, max: 50 })),
+            radius: '65%',
+            splitNumber: 4,
+            axisName: {
+                color: '#6b7280',
+                fontSize: 11
+            }
+        },
+        series: [{
+            type: 'radar',
+            data: [{
+                value: facets.map(f => f.weight),
+                name: '当前配置',
+                areaStyle: {
+                    color: new echarts.graphic.RadialGradient(0.5, 0.5, 1, [
+                        { offset: 0, color: 'rgba(59, 130, 246, 0.2)' },
+                        { offset: 1, color: 'rgba(59, 130, 246, 0.05)' }
+                    ])
+                },
+                lineStyle: { color: '#3b82f6', width: 2 },
+                itemStyle: { color: '#3b82f6' },
+                label: {
+                    show: true,
+                    formatter: (p) => p.value > 5 ? p.value : '',
+                    fontSize: 10,
+                    color: '#374151'
+                }
+            }],
+            emphasis: {
+                lineStyle: { width: 3 }
+            }
+        }]
+    };
+    radarChart.setOption(option);
+}
+
+// ==================== Conflict Matrix ====================
+function renderConflictMatrix() {
+    const container = document.getElementById('conflictMatrix');
+    let html = '';
+    
+    // Header row
+    html += '<div class="text-xs text-gray-400 text-center py-1"></div>';
+    facets.forEach(f => {
+        html += `<div class="text-xs text-gray-500 text-center py-1 truncate" title="${f.name}">${f.name.slice(0,2)}</div>`;
+    });
+    
+    facets.forEach((row, i) => {
+        html += `<div class="text-xs text-gray-500 text-right py-1 pr-1">${row.name.slice(0,2)}</div>`;
+        facets.forEach((col, j) => {
+            if (i === j) {
+                html += `<div class="conflict-cell bg-gray-100 rounded aspect-square"></div>`;
+            } else {
+                const conflict = conflicts.find(c => 
+                    (c.a === row.id && c.b === col.id) || (c.a === col.id && c.b === row.id)
+                );
+                const strength = conflict ? conflict.strength : 0;
+                // Calculate active conflict based on current weights
+                const tension = calculateTension(row.id, col.id, strength);
+                const opacity = tension;
+                const color = tension > 0.6 ? 'rgb(239, 68, 68)' : tension > 0.3 ? 'rgb(245, 158, 11)' : 'rgb(16, 185, 129)';
+                
+                html += `<div class="conflict-cell rounded aspect-square relative" 
+                    style="background: ${color}; opacity: ${0.1 + opacity * 0.9}"
+                    title="${row.name} ↔ ${col.name}: ${conflict ? conflict.desc : '无冲突'} (${(tension*100).toFixed(0)}%)"
+                ></div>`;
+            }
+        });
+    });
+    
+    container.innerHTML = html;
+    updateConflictAlert();
+}
+
+function calculateTension(idA, idB, baseStrength) {
+    const a = facets.find(f => f.id === idA).weight;
+    const b = facets.find(f => f.id === idB).weight;
+    // Tension increases when both are high (resource competition)
+    // and when base conflict is high
+    const resourcePressure = (a * b) / 2500; // normalize assuming max 50*50
+    return Math.min(1, baseStrength * (0.3 + 0.7 * resourcePressure));
+}
+
+function updateConflictMatrix() {
+    renderConflictMatrix();
+}
+
+function updateConflictAlert() {
+    let maxTension = 0;
+    let maxConflict = null;
+    
+    conflicts.forEach(c => {
+        const t = calculateTension(c.a, c.b, c.strength);
+        if (t > maxTension) {
+            maxTension = t;
+            maxConflict = c;
+        }
+    });
+    
+    const alertBox = document.getElementById('conflictAlert');
+    if (maxTension > 0.6) {
+        alertBox.classList.remove('hidden');
+        const aName = facets.find(f => f.id === maxConflict.a).name;
+        const bName = facets.find(f => f.id === maxConflict.b).name;
+        document.getElementById('conflictText').textContent = 
+            `${aName} 与 ${bName} 处于高危张力状态（${maxConflict.desc}）`;
+        alertBox.querySelector('div').classList.add('pulse-red');
+    } else {
+        alertBox.classList.add('hidden');
+    }
+}
+
+// ==================== Generation ====================
+function buildPrompt() {
+    const primary = facets.reduce((p, f) => f.weight > p.weight ? f : p, facets[0]);
+    const level = document.getElementById('crisisLevel').value;
+    
+    const systemPrompt = `你是一名危机公关声明撰写专员。你的唯一任务是将输入的事实信息，编译成符合《危机公关声明生产规范》的致歉文本。
+
+【当前框架】${level}-ETHIC
+【主切面】${primary.name}（权重${primary.weight}%）
+【语气档位】${level === 'L3' ? '全面投降型' : level === 'L2' ? '低头认罪型' : '务实修正型'}
+
+绝对禁止：
+- 解释创作初衷、本意、试图、希望
+- 使用"相关责任人"等模糊主语
+- 将根因推给审核不严、流程漏洞、把关不力
+- 出现"加强管理、深刻反思、举一反三"等空话
+- 提及内部稳定、资本市场、监管报备等非公众切面内容
+
+强制结构（五段式）：
+段1（≤80字）：事实确认+止损动作。不出现解释。
+段2（≤120字）：影响承认。必须点名具体群体+具体情感伤害+特殊时间节点定性。
+段3（≤150字）：根因认罪。必须在[敬畏心缺失/流量优先于底线/价值观偏差]中选择锚点。
+段4（≤120字）：处置公示。必须出现VP级实名+概括处罚（不出现具体月数/金额）。
+段5（≤100字）：行动承诺。必须有可验证的时间/产物/渠道。
+
+输出要求：
+- 只输出声明正文，不输出分析、不输出"备注"
+- 总字数控制在500字以内
+- 语言风格：真诚、克制、零辩解空间`;
+
+    const userPrompt = `事件标题：${document.getElementById('eventTitle').value}
+危机等级：${level}
+触发内容：${document.getElementById('triggerContent').value}
+受害群体：${document.getElementById('victim').value}
+特殊节点：${document.getElementById('timing').value || '无'}
+根因锚点：${document.getElementById('rootCause').value}
+责任人：${document.getElementById('executive').value}
+
+请严格按照五段式结构生成声明。`;
+
+    return { systemPrompt, userPrompt, primary, framework: `${level}-ETHIC` };
+}
+
+async function generateStatement() {
+    const btn = document.getElementById('genBtn');
+    const output = document.getElementById('outputArea');
+    const key = document.getElementById('apiKey').value;
+    const endpoint = document.getElementById('apiEndpoint').value;
+    const model = document.getElementById('modelName').value;
+    
+    if (!key) {
+        output.innerHTML = '<span class="text-red-500">请先输入 API Key</span>';
+        return;
+    }
+    
+    const { systemPrompt, userPrompt, primary, framework } = buildPrompt();
+    
+    btn.disabled = true;
+    btn.innerHTML = `<svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> 生成中...`;
+    output.textContent = '';
+    
+    try {
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${key}`
+            },
+            body: JSON.stringify({
+                model: model,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt }
+                ],
+                temperature: 0.3,
+                stream: true
+            })
+        });
+        
+        if (!res.ok) {
+            const err = await res.text();
+            throw new Error(`API Error: ${err}`);
+        }
+        
+        // Stream handling
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let fullText = '';
+        
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
+            
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const data = line.slice(6);
+                    if (data === '[DONE]') continue;
+                    try {
+                        const parsed = JSON.parse(data);
+                        const delta = parsed.choices?.[0]?.delta?.content || '';
+                        fullText += delta;
+                        output.textContent = fullText;
+                    } catch (e) {
+                        // ignore parse errors in stream
+                    }
+                }
+            }
+        }
+        
+        // Meta info
+        document.getElementById('metaInfo').classList.remove('hidden');
+        document.getElementById('metaPrimary').textContent = `${primary.name}(${primary.weight}%)`;
+        document.getElementById('metaFramework').textContent = framework;
+        document.getElementById('metaLength').textContent = fullText.length;
+        
+    } catch (err) {
+        output.innerHTML = `<span class="text-red-500">生成失败: ${err.message}</span>`;
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<span>生成危机声明</span><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>`;
+    }
+}
+
+function copyOutput() {
+    const text = document.getElementById('outputArea').textContent;
+    navigator.clipboard.writeText(text);
+}
+
+function downloadOutput() {
+    const text = document.getElementById('outputArea').textContent;
+    const blob = new Blob([text], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `crisis-statement-${new Date().toISOString().slice(0,10)}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// ==================== Bootstrap ====================
+window.addEventListener('load', init);
+window.addEventListener('resize', () => radarChart && radarChart.resize());
+</script>
+</body>
+</html>
